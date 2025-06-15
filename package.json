@@ -12,10 +12,11 @@
         "url": "https://github.com/nermalcat69/glone.git"
     },
     "license": "MIT",
-    "publisher": "nermalcat69",
+    "publisher": "ArjunAditya",
+    "icon": "assets/logo.png",
     "author": {
-        "name": "nermalcat69",
-        "email": "nermalcat69@example.com"
+        "name": "Arjun Aditya",
+        "email": "meow@nermalcat69.dev"
     },
     "homepage": "https://github.com/nermalcat69/glone#readme",
     "bugs": {
