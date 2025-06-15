@@ -194,16 +194,28 @@ class ProjectFileDetector {
     static detect(workspacePath: string): ProjectFileDetectionResult {
         try {
             const items = fs.readdirSync(workspacePath);
+            
+            // Filter out hidden files (starting with .) for initial check
+            const visibleItems = items.filter(item => !item.startsWith('.'));
+            
+            // If directory only has hidden files or is empty, no conflicts
+            if (visibleItems.length === 0) {
+                return {
+                    hasCommonFiles: false,
+                    detectedFiles: []
+                };
+            }
+            
             const detectedFiles: string[] = [];
             
-            // Check for common files
+            // Check for common files (including important hidden ones like .git)
             for (const file of ProjectFilePatterns.COMMON_FILES) {
                 if (items.includes(file)) {
                     detectedFiles.push(file);
                 }
             }
             
-            // Check for common directories
+            // Check for common directories (including important hidden ones like .git)
             for (const dir of ProjectFilePatterns.COMMON_DIRECTORIES) {
                 if (items.includes(dir)) {
                     const fullPath = path.join(workspacePath, dir);
@@ -218,14 +230,19 @@ class ProjectFileDetector {
                 }
             }
             
+            // Only consider it as having conflicts if we found significant project files
+            // or if there are visible non-hidden files that might conflict
+            const hasSignificantFiles = detectedFiles.length > 0;
+            
             return {
-                hasCommonFiles: detectedFiles.length > 0,
+                hasCommonFiles: hasSignificantFiles,
                 detectedFiles
             };
         } catch (error) {
             console.error('Error detecting project files:', error);
+            // If we can't read the directory, assume it's empty or we'll create it
             return {
-                hasCommonFiles: true, // Default to safe behavior
+                hasCommonFiles: false,
                 detectedFiles: []
             };
         }
@@ -277,13 +294,18 @@ class CloneLocationResolver {
         return {
             targetPath: workspacePath,
             cloneToRoot: true,
-            message: `Clone ${repository.name} contents to current workspace root? (No project files detected)`
+            message: `Cloning ${repository.name} to workspace root (empty workspace detected)`
         };
     }
 }
 
 class GitCloneService {
     static async clone(repository: GitRepository, location: CloneLocation, targetPath: string): Promise<CloneResult> {
+        // Handle special case: cloning to root with only hidden files
+        if (location.cloneToRoot && targetPath === location.targetPath) {
+            return this.cloneToRootWithHiddenFiles(repository, location, targetPath);
+        }
+        
         return new Promise<CloneResult>((resolve) => {
             const { gitArgs, workingDir } = this.prepareGitCommand(repository, location, targetPath);
             
@@ -321,6 +343,63 @@ class GitCloneService {
                     message: `Failed to start git process: ${error.message}`
                 });
             });
+        });
+    }
+
+    private static async cloneToRootWithHiddenFiles(repository: GitRepository, location: CloneLocation, targetPath: string): Promise<CloneResult> {
+        return new Promise<CloneResult>((resolve) => {
+            try {
+                const items = fs.readdirSync(targetPath);
+                const hiddenFiles = items.filter(item => item.startsWith('.'));
+                
+                for (const hiddenFile of hiddenFiles) {
+                    const hiddenPath = path.join(targetPath, hiddenFile);
+                    try {
+                        const stat = fs.statSync(hiddenPath);
+                        if (stat.isDirectory()) {
+                            fs.rmSync(hiddenPath, { recursive: true, force: true });
+                        } else {
+                            fs.unlinkSync(hiddenPath);
+                        }
+                    } catch {
+                    }
+                }
+                
+                const gitProcess = cp.spawn('git', ['clone', repository.normalizedUrl, '.'], {
+                    cwd: targetPath,
+                    stdio: ['ignore', 'pipe', 'pipe']
+                });
+                
+                let errorOutput = '';
+                
+                gitProcess.stderr?.on('data', (data) => {
+                    errorOutput += data.toString();
+                });
+                
+                gitProcess.on('close', (code) => {
+                    if (code === 0) {
+                        resolve(this.createSuccessResult(repository, location, targetPath));
+                    } else {
+                        resolve({
+                            success: false,
+                            message: `Failed to clone repository: ${errorOutput || 'Unknown error'}`
+                        });
+                    }
+                });
+                
+                gitProcess.on('error', (error) => {
+                    resolve({
+                        success: false,
+                        message: `Failed to start git process: ${error.message}`
+                    });
+                });
+                
+            } catch (error) {
+                resolve({
+                    success: false,
+                    message: `Failed to prepare clone: ${error}`
+                });
+            }
         });
     }
 
@@ -462,13 +541,10 @@ class GitCloneExtension {
     activate(context: vscode.ExtensionContext): void {
         console.log('Glone extension is now active');
         
-        // Register command
         const cloneCommand = vscode.commands.registerCommand('glone.cloneFromClipboard', () => this.executeClone());
         
-        // Start monitoring
         this.clipboardMonitor.start();
         
-        // Register for cleanup
         context.subscriptions.push(
             cloneCommand,
             this.statusBarManager,
@@ -493,7 +569,6 @@ class GitCloneExtension {
 
     private async executeClone(): Promise<void> {
         try {
-            // Get current repository from clipboard
             const clipboardText = await vscode.env.clipboard.readText();
             
             if (!clipboardText || !GitUrlValidator.isValid(clipboardText)) {
@@ -503,26 +578,16 @@ class GitCloneExtension {
 
             const repository = GitUrlValidator.createRepository(clipboardText);
             
-            // Resolve clone location
             const location = CloneLocationResolver.resolve(repository, vscode.workspace.workspaceFolders);
-            
-            // Confirm location with user
-            const confirmedPath = await UserInteractionService.confirmCloneLocation(location, repository);
-            
-            if (!confirmedPath) {
-                return; // User cancelled
-            }
 
-            // Execute clone with progress
             const result = await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: `Cloning ${repository.name}...`,
                 cancellable: false
             }, async () => {
-                return GitCloneService.clone(repository, location, confirmedPath);
+                return GitCloneService.clone(repository, location, location.targetPath);
             });
 
-            // Show result to user
             await UserInteractionService.showCloneResult(result, location);
 
         } catch (error) {

@@ -2,7 +2,7 @@
     "name": "glone",
     "displayName": "Glone",
     "description": "Smart VS Code extension to clone git repositories from clipboard with intelligent conflict detection",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "engines": {
         "vscode": "^1.60.0"
     },
