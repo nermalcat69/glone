@@ -258,10 +258,18 @@ class CloneLocationResolver {
     }
 
     private static resolveForExistingProject(repository: GitRepository, workspacePath: string): CloneLocation {
+        let targetPath = path.join(workspacePath, repository.name);
+        let counter = 1;
+        
+        while (fs.existsSync(targetPath)) {
+            targetPath = path.join(workspacePath, `${repository.name}-${counter}`);
+            counter++;
+        }
+        
         return {
-            targetPath: path.join(workspacePath, repository.name),
+            targetPath,
             cloneToRoot: false,
-            message: `Clone ${repository.name} to new folder? (Project files detected - avoiding conflicts)`
+            message: `Cloning ${repository.name} to new folder (avoiding conflicts)`
         };
     }
 
