@@ -1,0 +1,59 @@
+{
+    "name": "glone",
+    "displayName": "Glone",
+    "description": "Smart VS Code extension to clone git repositories from clipboard with intelligent conflict detection",
+    "version": "1.0.0",
+    "engines": {
+        "vscode": "^1.60.0"
+    },
+
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/nermalcat69/glone.git"
+    },
+    "license": "MIT",
+    "publisher": "nermalcat69",
+    "author": {
+        "name": "nermalcat69",
+        "email": "nermalcat69@example.com"
+    },
+    "homepage": "https://github.com/nermalcat69/glone#readme",
+    "bugs": {
+        "url": "https://github.com/nermalcat69/glone/issues"
+    },
+    "keywords": [
+        "git",
+        "clone",
+        "clipboard",
+        "repository",
+        "glone",
+        "smart-clone"
+    ],
+    "activationEvents": [
+        "onStartupFinished"
+    ],
+    "scripts": {
+        "compile": "tsc -p ./",
+        "package": "vsce package",
+        "watch": "tsc -watch -p ./",
+        "vscode:prepublish": "pnpm run compile"
+    },
+    "categories": [
+        "Other"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "glone.cloneFromClipboard",
+                "title": "Glone: Clone from Clipboard"
+            }
+        ]
+    },
+    "dependencies": {},
+    "devDependencies": {
+        "@types/node": "^14.17.0",
+        "@types/vscode": "^1.60.0",
+        "typescript": "^4.9.5"
+    }
+}
